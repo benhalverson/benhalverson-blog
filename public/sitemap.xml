@@ -6,7 +6,7 @@
   </url>
   <url>
     <loc>https://benhalverson.com/posts</loc>
-    <lastmod>2026-03-27</lastmod>
+    <lastmod>2026-03-18</lastmod>
   </url>
   <url>
     <loc>https://benhalverson.com/projects</loc>
@@ -15,6 +15,10 @@
   <url>
     <loc>https://benhalverson.com/about</loc>
     <lastmod>2026-03-27</lastmod>
+  </url>
+  <url>
+    <loc>https://benhalverson.com/posts/ngrx-vs-signals</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
   <url>
     <loc>https://benhalverson.com/projects/on-demand-3d-printer-platform</loc>
@@ -26,6 +30,18 @@
   </url>
   <url>
     <loc>https://benhalverson.com/projects/3d-modeling-lab</loc>
+    <lastmod>2026-03-18</lastmod>
+  </url>
+  <url>
+    <loc>https://benhalverson.com/tags/angular</loc>
+    <lastmod>2026-03-18</lastmod>
+  </url>
+  <url>
+    <loc>https://benhalverson.com/tags/state%20management</loc>
+    <lastmod>2026-03-18</lastmod>
+  </url>
+  <url>
+    <loc>https://benhalverson.com/tags/typescript</loc>
     <lastmod>2026-03-18</lastmod>
   </url>
 </urlset>

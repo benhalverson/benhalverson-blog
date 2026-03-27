@@ -41,38 +41,48 @@ export const generatedPosts: GeneratedPost[] = [
   {
     "title": "State Management: NgRx vs Signals",
     "slug": "ngrx-vs-signals",
-    "description": "Comparing NgRx and Angular Signals by the cost they introduce and the kinds of problems they solve well.",
+    "description": "Comparing NgRx and Angular Signals by the complexity they introduce, the constraints they handle well, and the tradeoffs they impose on an Angular codebase.",
     "publishedAt": "2026-03-18",
     "tags": [
       "Angular",
       "State Management",
       "TypeScript"
     ],
-    "draft": true,
+    "draft": false,
     "featured": false,
     "readingTime": {
-      "text": "1 min read",
-      "minutes": 0.75,
-      "words": 150
+      "text": "4 min read",
+      "minutes": 3.83,
+      "words": 766
     },
     "headings": [
       {
         "depth": 2,
-        "id": "when-signals-are-enough",
-        "text": "When signals are enough"
+        "id": "signals-low-ceremony-direct-reactivity",
+        "text": "Signals: low ceremony, direct reactivity"
       },
       {
         "depth": 2,
-        "id": "when-ngrx-still-earns-its-place",
-        "text": "When NgRx still earns its place"
+        "id": "ngrx-explicit-transitions-and-coordination-boundaries",
+        "text": "NgRx: explicit transitions and coordination boundaries"
       },
       {
         "depth": 2,
-        "id": "a-practical-rule",
-        "text": "A practical rule"
+        "id": "the-real-tradeoff-simplicity-vs-coordination-model",
+        "text": "The real tradeoff: simplicity vs coordination model"
+      },
+      {
+        "depth": 2,
+        "id": "a-practical-evaluation-model",
+        "text": "A practical evaluation model"
+      },
+      {
+        "depth": 2,
+        "id": "example-signals-for-derived-ui-state",
+        "text": "Example: Signals for derived UI state"
       }
     ],
-    "html": "<p>The right state tool depends less on ideology and more on the shape of your constraints.</p>\n<h2 id=\"when-signals-are-enough\">When signals are enough</h2>\n<p>Signals are a strong default for component-local state and many page-level workflows. They make data flow easier to trace, and they remove a large amount of ceremony when the application does not need event sourcing or cross-feature replayability.</p>\n<h2 id=\"when-ngrx-still-earns-its-place\">When NgRx still earns its place</h2>\n<p>NgRx becomes more valuable when the application needs explicit event history, complex side effects, or large teams aligning around predictable update boundaries.</p>\n<h2 id=\"a-practical-rule\">A practical rule</h2>\n<p>Start with signals unless you can name the coordination problems that require a bigger state model. That keeps the codebase smaller and lets complexity appear only when it is actually justified.</p>\n<pre><code class=\"hljs language-ts\"><span class=\"hljs-keyword\">readonly</span> selectedTag = signal&#x3C;<span class=\"hljs-built_in\">string</span> | <span class=\"hljs-literal\">null</span>>(<span class=\"hljs-literal\">null</span>);\n<span class=\"hljs-keyword\">readonly</span> filteredPosts = <span class=\"hljs-title function_\">computed</span>(<span class=\"hljs-function\">() =></span> {\n  <span class=\"hljs-keyword\">const</span> tag = <span class=\"hljs-variable language_\">this</span>.<span class=\"hljs-title function_\">selectedTag</span>();\n\n  <span class=\"hljs-keyword\">return</span> tag ? <span class=\"hljs-variable language_\">this</span>.<span class=\"hljs-title function_\">posts</span>().<span class=\"hljs-title function_\">filter</span>(<span class=\"hljs-function\">(<span class=\"hljs-params\">post</span>) =></span> post.<span class=\"hljs-property\">tags</span>.<span class=\"hljs-title function_\">includes</span>(tag)) : <span class=\"hljs-variable language_\">this</span>.<span class=\"hljs-title function_\">posts</span>();\n});\n</code></pre>"
+    "html": "<p>State management decisions in Angular are rarely about ideology. They are usually about constraint matching.</p>\n<p>NgRx and Angular Signals solve overlapping problems, but they do so with different operational models. The useful comparison is not which one is “better.” It is which one introduces the right level of structure for the kind of coordination your application actually needs.</p>\n<h2 id=\"signals-low-ceremony-direct-reactivity\">Signals: low ceremony, direct reactivity</h2>\n<p>Signals are well suited for component-local state, derived UI state, and many page-level workflows where the dependency graph is relatively easy to reason about.</p>\n<p>The main advantage is mechanical simplicity. State is declared close to where it is consumed, derived values are expressed with <code>computed()</code>, and updates are usually direct. That reduces indirection and makes it easier to trace how a given UI value is produced.</p>\n<p>This works especially well when:</p>\n<ul>\n<li>state is scoped to a page, feature shell, or component subtree</li>\n<li>updates are synchronous or only lightly asynchronous</li>\n<li>the application does not need a durable event model</li>\n<li>debugging is primarily about current state, not action history</li>\n</ul>\n<p>Signals can keep the implementation compact without forcing abstractions that the problem does not require.</p>\n<h2 id=\"ngrx-explicit-transitions-and-coordination-boundaries\">NgRx: explicit transitions and coordination boundaries</h2>\n<p>NgRx becomes more useful as state coordination expands across components, routes, services, and teams.</p>\n<p>Its value is not just centralization. The real benefit is explicitness. Actions define what happened, reducers define how state changes, and effects isolate side effects. That structure creates stable boundaries for large applications where multiple workflows interact and where uncontrolled mutation or ad hoc async handling becomes expensive.</p>\n<p>NgRx tends to fit better when:</p>\n<ul>\n<li>multiple features depend on the same state transitions</li>\n<li>side effects need to be modeled consistently</li>\n<li>state changes should be observable through explicit events</li>\n<li>teams benefit from strict update patterns and predictable flow</li>\n<li>debugging requires action-level visibility rather than only current values</li>\n</ul>\n<p>The tradeoff is additional ceremony. That cost is often unnecessary for small or isolated workflows, but it can become useful friction in larger systems.</p>\n<h2 id=\"the-real-tradeoff-simplicity-vs-coordination-model\">The real tradeoff: simplicity vs coordination model</h2>\n<p>The decision is usually less about performance and more about how much coordination the application requires.</p>\n<p>Signals optimize for directness. They let you model state with minimal abstraction and keep logic near consumption.</p>\n<p>NgRx optimizes for structure. It adds layers, but those layers make state transitions, side effects, and ownership boundaries more explicit.</p>\n<p>That means each tool introduces a different kind of cost:</p>\n<ul>\n<li>Signals reduce boilerplate but can become harder to scale when cross-feature coordination grows without a clear pattern.</li>\n<li>NgRx increases boilerplate but can reduce ambiguity when many actors are changing shared state.</li>\n</ul>\n<p>Neither tradeoff is universally correct. The better fit depends on whether the dominant problem is local reactivity or system-wide coordination.</p>\n<h2 id=\"a-practical-evaluation-model\">A practical evaluation model</h2>\n<p>A useful way to evaluate the choice is to ask a few concrete questions:</p>\n<ol>\n<li>\n<p><strong>Where does the state live?</strong><br>\nIf it is local to a component or feature boundary, Signals may be sufficient. If it spans unrelated parts of the application, stronger coordination boundaries may help.</p>\n</li>\n<li>\n<p><strong>How many actors update it?</strong><br>\nState updated by one UI surface is simpler than state updated by multiple pages, drawers, effects, background refreshes, and server responses.</p>\n</li>\n<li>\n<p><strong>How important is event traceability?</strong><br>\nIf you need to know not only the current value but also what happened and in what order, NgRx provides a more explicit model.</p>\n</li>\n<li>\n<p><strong>How complex are the side effects?</strong><br>\nSimple request/response flows can remain straightforward with Signals. More involved orchestration often benefits from explicit effect handling.</p>\n</li>\n<li>\n<p><strong>How large is the team and codebase?</strong><br>\nSmall teams can often move faster with less ceremony. Larger teams may benefit from more rigid consistency.</p>\n</li>\n</ol>\n<h2 id=\"example-signals-for-derived-ui-state\">Example: Signals for derived UI state</h2>\n<p>For local filtering and straightforward derived state, Signals are often enough:</p>\n<pre><code class=\"hljs language-ts\"><span class=\"hljs-keyword\">readonly</span> selectedTag = signal&#x3C;<span class=\"hljs-built_in\">string</span> | <span class=\"hljs-literal\">null</span>>(<span class=\"hljs-literal\">null</span>);\n\n<span class=\"hljs-keyword\">readonly</span> filteredPosts = <span class=\"hljs-title function_\">computed</span>(<span class=\"hljs-function\">() =></span> {\n  <span class=\"hljs-keyword\">const</span> tag = <span class=\"hljs-variable language_\">this</span>.<span class=\"hljs-title function_\">selectedTag</span>();\n  <span class=\"hljs-keyword\">const</span> posts = <span class=\"hljs-variable language_\">this</span>.<span class=\"hljs-title function_\">posts</span>();\n\n  <span class=\"hljs-keyword\">return</span> tag\n    ? posts.<span class=\"hljs-title function_\">filter</span>(<span class=\"hljs-function\">(<span class=\"hljs-params\">post</span>) =></span> post.<span class=\"hljs-property\">tags</span>.<span class=\"hljs-title function_\">includes</span>(tag))\n    : posts;\n});\n</code></pre>\n<p>This is a good example of where Signals fit naturally: local input, derived output, and minimal coordination overhead.</p>\n<p>Conclusion</p>\n<p>NgRx and Signals are both valid tools in modern Angular applications. The better choice depends on the shape of the state problem, not on a blanket preference for minimalism or structure.</p>\n<p>Signals are often a strong fit for local and feature-level reactivity. NgRx becomes more compelling when shared state, side effects, and coordination boundaries become first-order concerns.</p>\n<p>A good state model is the one that matches the operational complexity of the application without introducing significantly more complexity than the problem deserves.</p>"
   },
   {
     "title": "Using Server-Side Rendering with Angular",
