@@ -7,8 +7,8 @@ tags:
   - Angular
   - SSR
   - Performance
-draft: false
-featured: false
+draft: true
+featured: false 
 ---
 
 SSR is useful when it solves a specific rendering or delivery problem. It is not automatically the right default.

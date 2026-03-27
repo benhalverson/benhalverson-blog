@@ -7,8 +7,8 @@ tags:
   - Angular
   - State Management
   - TypeScript
-draft: false
-featured: true
+draft: true 
+featured: false 
 ---
 
 The right state tool depends less on ideology and more on the shape of your constraints.

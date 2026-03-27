@@ -6,7 +6,7 @@ publishedAt: 2026-03-02
 tags:
   - TypeScript
   - JavaScript
-draft: false
+draft: true
 featured: false
 ---
 

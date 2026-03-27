@@ -7,8 +7,8 @@ tags:
   - Cloudflare
   - JavaScript
   - Performance
-draft: false
-featured: true
+draft: true
+featured: false
 ---
 
 Upload workflows usually fail for operational reasons before they fail for algorithmic ones.

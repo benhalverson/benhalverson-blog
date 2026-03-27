@@ -7,8 +7,8 @@ tags:
   - Angular
   - Cloudflare
   - SSG
-draft: false
-featured: true
+draft: true 
+featured: false 
 ---
 
 Angular's current SSR and prerender tooling is finally flexible enough to support a repo-first content workflow without building a separate content service around it.

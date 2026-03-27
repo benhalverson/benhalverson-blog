@@ -2,11 +2,11 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://benhalverson.com/</loc>
-    <lastmod>2026-03-26</lastmod>
+    <lastmod>2026-03-24</lastmod>
   </url>
   <url>
     <loc>https://benhalverson.com/posts</loc>
-    <lastmod>2026-03-26</lastmod>
+    <lastmod>2026-03-27</lastmod>
   </url>
   <url>
     <loc>https://benhalverson.com/projects</loc>
@@ -15,26 +15,6 @@
   <url>
     <loc>https://benhalverson.com/about</loc>
     <lastmod>2026-03-27</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/posts/angular-ssg-cloudflare-pages</loc>
-    <lastmod>2026-03-26</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/posts/ngrx-vs-signals</loc>
-    <lastmod>2026-03-18</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/posts/server-side-rendering-with-angular</loc>
-    <lastmod>2026-03-12</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/posts/optimizing-r2-uploads-workers</loc>
-    <lastmod>2026-03-05</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/posts/migrating-to-typescript</loc>
-    <lastmod>2026-03-02</lastmod>
   </url>
   <url>
     <loc>https://benhalverson.com/projects/on-demand-3d-printer-platform</loc>
@@ -46,38 +26,6 @@
   </url>
   <url>
     <loc>https://benhalverson.com/projects/3d-modeling-lab</loc>
-    <lastmod>2026-03-18</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/angular</loc>
-    <lastmod>2026-03-26</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/cloudflare</loc>
-    <lastmod>2026-03-26</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/javascript</loc>
-    <lastmod>2026-03-05</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/performance</loc>
-    <lastmod>2026-03-12</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/ssg</loc>
-    <lastmod>2026-03-26</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/ssr</loc>
-    <lastmod>2026-03-12</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/state%20management</loc>
-    <lastmod>2026-03-18</lastmod>
-  </url>
-  <url>
-    <loc>https://benhalverson.com/tags/typescript</loc>
     <lastmod>2026-03-18</lastmod>
   </url>
 </urlset>

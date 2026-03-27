@@ -12,8 +12,8 @@ export const generatedPosts: GeneratedPost[] = [
       "Cloudflare",
       "SSG"
     ],
-    "draft": false,
-    "featured": true,
+    "draft": true,
+    "featured": false,
     "readingTime": {
       "text": "1 min read",
       "minutes": 0.8,
@@ -48,8 +48,8 @@ export const generatedPosts: GeneratedPost[] = [
       "State Management",
       "TypeScript"
     ],
-    "draft": false,
-    "featured": true,
+    "draft": true,
+    "featured": false,
     "readingTime": {
       "text": "1 min read",
       "minutes": 0.75,
@@ -84,7 +84,7 @@ export const generatedPosts: GeneratedPost[] = [
       "SSR",
       "Performance"
     ],
-    "draft": false,
+    "draft": true,
     "featured": false,
     "readingTime": {
       "text": "1 min read",
@@ -115,8 +115,8 @@ export const generatedPosts: GeneratedPost[] = [
       "JavaScript",
       "Performance"
     ],
-    "draft": false,
-    "featured": true,
+    "draft": true,
+    "featured": false,
     "readingTime": {
       "text": "1 min read",
       "minutes": 0.57,
@@ -150,7 +150,7 @@ export const generatedPosts: GeneratedPost[] = [
       "TypeScript",
       "JavaScript"
     ],
-    "draft": false,
+    "draft": true,
     "featured": false,
     "readingTime": {
       "text": "1 min read",
