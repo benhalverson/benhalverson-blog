@@ -1,59 +1,110 @@
-# BenhalversonBlog
+# benhalverson-blog
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.3.
+Personal developer blog for `benhalverson.com`, built with Angular, Markdown, and Cloudflare-friendly server output.
 
-## Development server
+## What This Repo Is
 
-To start a local development server, run:
+This repo is a content-driven engineering blog and project site.
 
-```bash
-ng serve
+It includes:
+
+- Markdown-authored blog posts in `content/posts`
+- Markdown-authored project pages in `content/projects`
+- an About page in `content/pages`
+- generated RSS, sitemap, and robots files
+- prerendered routes for known content pages
+- Cloudflare Worker deployment via `wrangler`
+
+The site is designed to stay repo-first and low-maintenance: content lives in Markdown, the build step generates the structured artifacts, and Angular handles the routed UI.
+
+## Current Sections
+
+- `/` homepage with latest posts and featured projects
+- `/posts` post archive
+- `/posts/:slug` individual post pages
+- `/tags/:tag` tag archives
+- `/projects` project index
+- `/projects/:slug` individual project pages
+- `/about` about page
+
+## Content Workflow
+
+Add or update content in:
+
+```text
+content/
+  posts/
+  projects/
+  pages/
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+Then run:
 
 ```bash
-ng generate component component-name
+pnpm run generate:content
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+That generation step produces:
+
+- `src/app/blog/generated/content.generated.ts`
+- `public/rss.xml`
+- `public/sitemap.xml`
+- `public/robots.txt`
+
+## Local Development
+
+Install dependencies:
 
 ```bash
-ng generate --help
+pnpm install
 ```
 
-## Building
-
-To build the project run:
+Start the app:
 
 ```bash
-ng build
+pnpm start
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+The content generator runs automatically before dev, test, and build.
 
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+## Useful Commands
 
 ```bash
-ng test
+pnpm start
+pnpm run generate:content
+pnpm test
+pnpm build
+pnpm preview
+pnpm deploy
 ```
 
-## Running end-to-end tests
+## Deployment
 
-For end-to-end (e2e) testing, run:
+This repo is configured for Cloudflare Worker deployment.
 
-```bash
-ng e2e
-```
+- Worker config: `wrangler.jsonc`
+- build output: `dist/`
+- local preview: `pnpm preview`
+- deploy: `pnpm deploy`
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+## Tech Stack
 
-## Additional Resources
+- Angular 21
+- TypeScript
+- Markdown content pipeline with frontmatter
+- `remark` / `rehype` for Markdown rendering
+- Tailwind CSS import plus custom styling
+- Cloudflare Workers / Wrangler
 
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+## Status
+
+The current MVP includes:
+
+- blog posts
+- project pages with roadmap-style content
+- RSS feed
+- sitemap
+- robots.txt
+- prerendered content routes
+
+Remaining work is mostly polish, especially accessibility verification and deployment automation choices.
