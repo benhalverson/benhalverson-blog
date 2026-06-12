@@ -4,7 +4,7 @@ slug: on-demand-3d-printer-platform
 description: API and web application for intake, quoting, queue management, and fulfillment across custom print requests.
 status: active
 startedAt: 2026-01-12
-updatedAt: 2026-06-11
+updatedAt: 2026-06-12
 tags:
   - TypeScript
   - API
@@ -32,6 +32,204 @@ Build a dependable order-to-queue path that keeps pricing, material selection, a
 - [ ] Add webhook-driven notifications for state changes
 
 ## Recent progress
+
+### 2026-06-12 · [Use Slant3D V2 draft orders for cart shipping estimates (#154)](https://github.com/benhalverson/3dprinter-farm/pull/154)
+
+`/cart/shipping` now estimates shipping via Slant3D V2 draft orders instead of the V1 `order/estimate` flow. The route builds a V2 order payload from cart items plus the authenticated user’s shipping profile, while keeping the existing caller-facing response shape.
+
+- **Integration change**
+  - Replace V1 `order/estimate` with V2 `POST /orders`
+  - Stop short of any follow-up `POST /orders/{publicOrderId}` call
+  - Normalize V2 estimate responses back to `{ shippingCost }`
+
+- **Order payload construction**
+  - Source print items from cart rows joined to product metadata
+  - Require `products.publicFileServiceId` per item
+  - Use cart `filamentId` when present; otherwise fall back to PLA Black
+  - Carry shipping/billing address data from the authenticated user profile
+
+```ts
+{
+  shippingAddress: { ...profileAddress },
+  billingAddress: { ...profileAddress },
+  orderItems: [
+    {
+      publicFileServiceId,
+      filamentId,
+      quantity,
+    },
+  ],
+}
+```
+
+Impact: - **API behavior**
+  - Existing `/cart/shipping` callers still receive `{ shippingCost }`
+  - Missing `publicFileServiceId` now returns a clear 400-style response
+  - Slant3D draft-order failures now return a clear upstream failure response with status/details
+
+- **Operationally**
+  - Shipping estimation now depends on V2 draft-order semantics and `publicFileServiceId` being populated on products
+
+Context: paths `src`, `test`
+
+### 2026-06-12 · [Add cart filamentId support for Slant3D V2 fulfillment (#153)](https://github.com/benhalverson/3dprinter-farm/pull/153)
+
+Cart items now carry an optional Slant3D V2 `filamentId` while preserving existing `color` and `filamentType` behavior. The cart API also normalizes missing filament IDs to the default PLA Black filament so legacy and new callers behave consistently.
+
+- **Schema + persistence**
+  - Added cart-level `filamentId` storage.
+  - Added a D1 migration for the new `filament_id` column.
+  - Reused a shared PLA Black default filament ID constant.
+
+- **API behavior**
+  - `POST /cart/add` accepts optional `filamentId` and validates it as a UUID.
+  - Missing `filamentId` is defaulted to PLA Black.
+  - Cart item reads include `filamentId`.
+  - Existing cart matching/backcompat still respects `color` and `filamentType`; legacy rows without `filamentId` are treated as default PLA Black.
+
+- **Coverage**
+  - Added focused cart tests for explicit filament preservation, UUID validation, and default filament behavior.
+
+```ts
+{
+  cartId,
+  skuNumber,
+  quantity,
+  color,
+  filamentType,
+  filamentId: '76fe1f79-3f1e-43e4-b8f4-61159de5b93c' // defaulted when omitted
+}
+```
+
+Impact: Cart callers can now send and retrieve Slant3D filament public IDs for V2 fulfillment. Callers that only use `color` and `filamentType` continue to work unchanged, and carts without a supplied filament ID resolve to PLA Black.
+
+Context: paths `drizzle`, `src`, `test`
+
+### 2026-06-12 · [Stop /v2/upload from self-fetching protected V2 routes (#152)](https://github.com/benhalverson/3dprinter-farm/pull/152)
+
+`/v2/upload` was routing through protected local Worker endpoints for presign, confirm, and estimate, which broke the authenticated upload flow unless those internal self-fetches succeeded. This change moves the Slant3D V2 file operations into shared helpers so `/v2/upload` calls Slant directly while the public helper endpoints keep their existing response contracts.
+
+- **Shared Slant3D V2 file helpers**
+  - Extract direct-upload, confirm-upload, and estimate calls into `src/lib/slant3d-v2-files.ts`
+  - Centralize request construction and error parsing for the V2 file workflow
+  - `parseResponseDetails` tries `response.json()` first, then falls back to `text()` + `JSON.parse` to handle varied Slant3D error response shapes
+
+- **`/v2/upload` flow**
+  - Replace internal fetches to `/v2/presigned-upload`, `/v2/confirm`, and `/v2/estimate`
+  - Preserve current STL validation behavior and `/v2/upload` response shape
+  - Keep the same default estimate behavior for PLA BLACK / quantity 1
+
+- **Protected route compatibility**
+  - Rewire `/v2/presigned-upload`, `/v2/confirm`, and `/v2/estimate` to use the same shared helpers
+  - Add malformed-response validation in each route handler (missing `total`, `presignedUrl`/`key`, or `publicFileServiceId`/`name`/`fileURL`) to preserve 500 error contracts
+  - Adopt estimate response normalization from main, filling in fallback values for `publicFileServiceId`, `quantity`, `filamentId`, and `estimatedCost`
+  - Preserve their public JSON contracts instead of introducing a second code path
+
+```ts
+const presigned = await createSlant3DDirectUpload(c.env, {
+  name: fileName.replace(/\.stl$/i, ''),
+  ownerId: userId?.toString() || 'anonymous',
+});
+
+const confirmed = await confirmSlant3DUpload(c.env, presigned.filePlaceholder);
+
+const estimate = await estimateSlant3DFile(c.env, confirmed.publicFileServiceId, {
+  filamentId: defaultFilamentId,
+  quantity: 1,
+});
+```
+
+Impact: - `/v2/upload` no longer depends on unauthenticated self-fetches to protected local routes
+- Authenticated uploads continue returning the same payload, but now complete through direct Slant3D helper calls
+- `/v2/estimate` response now includes normalized fields (`estimatedCost`, fallback `quantity`, `filamentId`, `publicFileServiceId`) for more consistent downstream consumption
+- Coverage now explicitly includes invalid type, empty file, oversized file, Slant failures, success, and the absence of local protected endpoint self-fetching
+
+Context: paths `src`, `test`
+
+### 2026-06-12 · [Align Slant3D V2 file routes with live file API contract (#151)](https://github.com/benhalverson/3dprinter-farm/pull/151)
+
+Aligned the Slant3D V2 file flow with the live contract used by the printer routes. `/v2/presigned-upload`, `/v2/confirm`, and `/v2/estimate` now follow the live file endpoints and treat estimate totals as `data.total`.
+
+- **Route contract alignment**
+  - kept direct upload on `POST /files/direct-upload`
+  - kept confirm on `POST /files/confirm-upload`
+  - kept estimate on `POST /files/{publicFileId}/estimate`
+
+- **Response shape normalization**
+  - validated successful Slant responses before using them
+  - normalized local estimate responses from Slant `data.total`
+  - preserved local `estimatedCost` as a compatibility alias for existing callers
+
+- **Failure handling**
+  - return explicit errors when Slant returns malformed successful payloads
+  - tightened add-product estimate parsing to require the live estimate shape instead of falling back across legacy fields
+
+```ts
+const total = estimateResponse.data.total;
+
+return {
+  success: true,
+  data: {
+    total,
+    estimatedCost: total, // compatibility
+  },
+};
+```
+
+Impact: Users and operators get more predictable failures when Slant returns malformed payloads instead of partial/implicit parsing. Estimate-backed flows now consistently price from the live Slant V2 total field while keeping existing local response consumers compatible.
+
+Context: paths `src`, `test`
+
+### 2026-06-12 · [Remove duplicate mounted Stripe webhook route (#156)](https://github.com/benhalverson/3dprinter-farm/pull/156)
+
+Removed the stale duplicate Stripe webhook route so the mounted app has a single authoritative `/webhook/stripe` implementation in `src/routes/payments.ts`. This cleanup also removes the obsolete TODO-only handler path and adds a regression check around the mounted webhook behavior.
+
+- **Route ownership**
+  - Removed the standalone `src/routes/webhooks.ts` implementation.
+  - Stopped mounting the duplicate webhook router from `src/index.ts`.
+  - Kept `src/routes/payments.ts` as the sole mounted owner of `/webhook/stripe`.
+
+- **Behavior guardrail**
+  - Added a focused payments-route test covering an unhandled Stripe event to assert the app resolves through the payments webhook handler, not the deleted stale route.
+
+```ts
+.route('/', paymentsRouter)
+.route('/', shoppingCart);
+```
+
+Impact: - Stripe webhooks now resolve through one mounted handler only, eliminating ambiguity in request handling and OpenAPI ownership.
+- Operators should configure Stripe against the existing `/webhook/stripe` endpoint owned by payments.
+
+Context: paths `src`, `test`
+
+### 2026-06-11 · [Remove legacy PayPal payment surface (#150)](https://github.com/benhalverson/3dprinter-farm/pull/150)
+
+- **API surface**
+  - Removed `POST /paypal` from payments routing.
+  - Deleted the PayPal access helper and removed PayPal response types.
+
+- **Dependencies / test scaffolding**
+  - Removed `@paypal/checkout-server-sdk` from `package.json` and `pnpm-lock.yaml`.
+  - Removed PayPal mocks and skipped PayPal route tests.
+  - Added a focused assertion that the legacy route is no longer exposed.
+
+```ts
+const res = await app.fetch(new Request('http://localhost/paypal', {
+  method: 'POST',
+}), env);
+
+expect(res.status).toBe(404);
+```
+
+- **Package management cleanup**
+  - Removed the tracked `package-lock.json` file so the repo only keeps pnpm lock metadata.
+
+Impact: - Stripe remains unchanged.
+- `POST /paypal` is no longer available; callers now receive `404`.
+- PayPal env/config is no longer required by app code.
+- Maintainers should use pnpm lockfiles only; `package-lock.json` is no longer tracked.
+
+Context: paths `package-lock.json`, `package.json`, `pnpm-lock.yaml`, `src`, `test`
 
 ### 2026-06-11 · [Bump vite from 6.3.4 to 6.4.2 (#141)](https://github.com/benhalverson/3dprinter-farm/pull/141)
 
@@ -137,182 +335,13 @@ Impact: See the linked pull request for implementation details.
 
 Context: paths `pnpm-lock.yaml`
 
-### 2026-03-18 · [Bump wrangler from 4.35.0 to 4.75.0 (#126)](https://github.com/benhalverson/3dprinter-farm/pull/126)
-
-Bumps [wrangler](https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler) from 4.35.0 to 4.75.0.
-<details>
-<summary>Release notes</summary>
-<p><em>Sourced from <a href="https://github.com/cloudflare/workers-sdk/releases">wrangler's releases</a>.</em></p>
-<blockquote>
-<h2>wrangler@4.75.0</h2>
-<h3>Minor Changes</h3>
-<ul>
-<li>
-<p><a href="https://redirect.github.com/cloudflare/workers-sdk/pull/12492">#12492</a> <a href="https://github.com/cloudflare/workers-sdk/commit/3b81fc6a75857d5c158824f17d9316adc55878fc"><code>3b81fc6</code></a> Thanks <a href="https://github.com/thomasgauvin"><code>@​thomasgauvin</code></a>! - feat: add <code>wrangler tunnel</code> commands for managing Cloudflare Tunnels</p>
-<p>Adds a new set of commands for managing remotely-managed Cloudflare Tunnels directly from Wrangler:</p>
-<ul>
-<li><code>wrangler tunnel create &lt;name&gt;</code> - Create a new Cloudflare Tunnel</li>
-<li><code>wrangler tunnel list</code> - List all tunnels in your account</li>
-<li><code>wrangler tunnel info &lt;tunnel&gt;</code> - Display details about a specific tunnel</li>
-<li><code>wrangler tunnel delete &lt;tunnel&gt;</code> - Delete a tunnel (with confirmation)</li>
-<li><code>wrangler tunnel run &lt;tunnel&gt;</code> - Run a tunnel using cloudflared</li>
-<li><code>wrangler tunnel quick-start &lt;url&gt;</code> - Start a temporary tunnel (Try Cloudflare)</li>
-</ul>
-<p>The <code>run</code> and <code>quick-start</code> commands automatically download and manage the cloudflared binary, caching it in <code>~/.wrangler/cloudflared/</code>. Users are prompted before downloading and warned if their PATH-installed cloudflared is outdated. You can override the binary location with the <code>CLOUDFLARED_PATH</code> environment variable.</p>
-<p>All commands are marked as experimental.</p>
-</li>
-</ul>
-<h3>Patch Changes</h3>
-<ul>
-<li>
-<p><a href="https://redirect.github.com/cloudflare/workers-sdk/pull/12927">#12927</a> <a href="https://github.com/cloudflare/workers-sdk/commit/c9b31840631585418b8926e8228db486b619b4c7"><code>c9b3184</code></a> Thanks <a href="https://github.com/penalosa"><code>@​penalosa</code></a>! - Bump undici from 7.18.2 to 7.24.4</p>
-</li>
-<li>
-<p><a href="https://redirect.github.com/cloudflare/workers-sdk/pull/12875">#12875</a> <a href="https://github.com/cloudflare/workers-sdk/commit/13df6c75be49ac32fc1c57e2e24523e86ced2115"><code>13df6c7</code></a> Thanks <a href="https://github.com/apps/dependabot"><code>@​dependabot</code></a>! - Update dependencies of &quot;miniflare&quot;, &quot;wrangler&quot;</p>
-<p>The following dependency versions have been updated:</p>
-<table>
-<thead>
-<tr>
-<th>Dependency</th>
-<th>From</th>
-<th>To</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>workerd</td>
-<td>1.20260312.1</td>
-<td>1.20260316.1</td>
-</tr>
-</tbody>
-</table>
-</li>
-<li>
-<p><a href="https://redirect.github.com/cloudflare/workers-sdk/pull/12935">#12935</a> <a href="https://github.com/cloudflare/workers-sdk/commit/df0d1120a856bd65553bf92b4bc6380c15e81cc7"><code>df0d112</code></a> Thanks <a href="https://github.com/apps/dependabot"><code>@​dependabot</code></a>! - Update dependencies of &quot;miniflare&quot;, &quot;wrangler&quot;</p>
-<p>The following dependency versions have been updated:</p>
-<table>
-<thead>
-<tr>
-<th>Dependency</th>
-<th>From</th>
-<th>To</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>workerd</td>
-<td>1.20260316.1</td>
-<td>1.20260317.1</td>
-</tr>
-</tbody>
-</table>
-</li>
-<li>
-<p><a href="https://redirect.github.com/cloudflare/workers-sdk/pull/12928">#12928</a> <a href="https://github.com/cloudflare/workers-sdk/commit/81ee98e6a0c6be879757289ef6e34e1559d6ee2a"><code>81ee98e</code></a> Thanks <a href="https://github.com/petebacondarwin"><code>@​petebacondarwin</code></a>! - Migrate chrome-devtools-patches deployment from Cloudflare Pages to Workers + Assets</p>
-<p>The DevTools frontend is now deployed as a Cloudflare Workers + Assets project instead of a Cloudflare Pages project. This uses <code>wrangler deploy</code> for production deployments and <code>wrangler versions upload</code> for PR preview deployments.</p>
-<p>The inspector proxy origin allowlists in both wrangler and miniflare have been updated to accept connections from the new <code>workers.dev</code> domain patterns, while retaining the legacy <code>pages.dev</code> patterns for backward compatibility.</p>
-</li>
-<li>
-<p><a href="https://redirect.github.com/cloudflare/workers-sdk/pull/12835">#12835</a> <a href="https://github.com/cloudflare/workers-sdk/commit/c600ce0a45ad334a5a961cf7774758860581d9d2"><code>c600ce0</code></a> Thanks <a href="https://github.com/dario-piotrowicz"><code>@​dario-piotrowicz</code></a>! - Fix execution freezing on <code>debugger</code> statements when DevTools is not attached</p>
-<p>Previously, <code>wrangler</code> always sent <code>Debugger.enable</code> to the runtime on connection, even when DevTools wasn't open. This caused scripts to freeze on <code>debugger</code> statements. Now <code>Debugger.enable</code> is only sent when DevTools is actually attached, and <code>Debugger.disable</code> is sent when DevTools disconnects to stop the runtime from performing debugging work.</p>
-</li>
-<li>
-<p><a href="https://redirect.github.com/cloudflare/workers-sdk/pull/12894">#12894</a> <a href="https://github.com/cloudflare/workers-sdk/commit/f509d13b97a832a28ed6bc568c7bcf6fc7d4a4ff"><code>f509d13</code></a> Thanks <a href="https://github.com/gpanders"><code>@​gpanders</code></a>! - Simplify description of --json option</p>
-</li>
-</ul>
-
-Impact: </blockquote>
-<p>... (truncated)</p>
-</details>
-<details>
-<summary>Commits</summary>
-<ul>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/a671740787a95779f89e3b1bb2154990c6e14212"><code>a671740</code></a> Version Packages (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/12923">#12923</a>)</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/e25bd0ef64753e12c7ac5849a2b3d35b45e5fe2a"><code>e25bd0e</code></a> Update prettier to 3.8.1 (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/12939">#12939</a>)</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/df0d1120a856bd65553bf92b4bc6380c15e81cc7"><code>df0d112</code></a> Bump the workerd-and-workers-types group with 2 updates (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/12935">#12935</a>)</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/81ee98e6a0c6be879757289ef6e34e1559d6ee2a"><code>81ee98e</code></a> [chrome-devtools-patches] Migrate deployment from Cloudflare Pages to Workers...</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/3b81fc6a75857d5c158824f17d9316adc55878fc"><code>3b81fc6</code></a> feat(wrangler): add wrangler tunnel (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/12492">#12492</a>)</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/13df6c75be49ac32fc1c57e2e24523e86ced2115"><code>13df6c7</code></a> Bump the workerd-and-workers-types group with 2 updates (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/12875">#12875</a>)</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/0a7fef9ee924b6d0817a69be9d893dc8a40c9a19"><code>0a7fef9</code></a> wrangler: reject cross-drive module paths (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/11888">#11888</a>)</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/f509d13b97a832a28ed6bc568c7bcf6fc7d4a4ff"><code>f509d13</code></a> Remove superfluous adjective from --json description (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/12894">#12894</a>)</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/c600ce0a45ad334a5a961cf7774758860581d9d2"><code>c600ce0</code></a> Fix execution freezing on <code>debugger</code> statements when DevTools is not attached...</li>
-<li><a href="https://github.com/cloudflare/workers-sdk/commit/2e6b4ab2b85543bdf3e29ff82004e33538dcf063"><code>2e6b4ab</code></a> Version Packages (<a href="https://github.com/cloudflare/workers-sdk/tree/HEAD/packages/wrangler/issues/12876">#12876</a>)</li>
-<li>Additional commits viewable in <a href="https://github.com/cloudflare/workers-sdk/commits/wrangler@4.75.0/packages/wrangler">compare view</a></li>
-</ul>
-</details>
-<details>
-<summary>Maintainer changes</summary>
-<p>This version was pushed to npm by [GitHub Actions](<a href="https://www.npmjs.com/~GitHub">https://www.npmjs.com/~GitHub</a> Actions), a new releaser for wrangler since your current version.</p>
-</details>
-<br />
-
-Context: labels `dependencies`, `javascript` | paths `pnpm-lock.yaml`
-
-### 2026-03-18 · [Fix payment intent metadata userId trust issue (#121)](https://github.com/benhalverson/3dprinter-farm/pull/121)
-
-Fixes a security vulnerability where the `POST /cart/:cartId/payment-intent` route accepted a client-supplied `userId` in the request body and forwarded it into Stripe payment metadata, allowing an attacker to misattribute fulfillment to another user.
-
-Impact: - ✅ All 16 shopping cart tests pass
-- ✅ All payments tests pass
-- ✅ CodeQL security scan finds 0 alerts
-
-Context: paths `src`, `test`
-
-### 2026-03-18 · [Enforce cart ownership across all cart mutation routes (#120)](https://github.com/benhalverson/3dprinter-farm/pull/120)
-
-Cart routes accepted arbitrary `cartId` values without verifying the caller owned that cart, allowing authenticated users to tamper with, read, or check out other users' carts.
-
-Impact: | Route | Change |
-|---|---|
-| `POST /cart/add` | `optionalAuthMiddleware` — binds new items to `userId`; 403 if caller is a different authenticated user |
-| `PUT /cart/update` | `optionalAuthMiddleware` — 401/403 if cart is owned and caller doesn't match |
-| `DELETE /cart/remove` | `optionalAuthMiddleware` — select-before-delete ownership check; 401/403 on mismatch |
-| `GET /cart/shipping` | Fetches `cart.userId` inline; 403 on cross-user access |
-| `POST /cart/:cartId/payment-intent` | **Removes body-supplied `userId`** (was a privilege-escalation vector); always derives identity from JWT; 403 on cross-user access |
-
-Context: paths `drizzle`, `src`, `test`
-
-### 2026-03-18 · [Fix SSRF in v2/add-product: restrict STL fetches to trusted R2 origin (#122)](https://github.com/benhalverson/3dprinter-farm/pull/122)
-
-`POST /v2/add-product` passed `data.stl` directly to a server-side `fetch()` with no origin validation, enabling SSRF via attacker-controlled URLs.
-
-Impact: ```ts
-if (!isAllowedStlUrl(data.stl, c.env.R2_PUBLIC_BASE_URL)) {
-  return c.json({ error: 'Invalid STL URL', details: '...' }, 400);
-}
-const fileResponse = await fetch(data.stl);
-```
-
-Context: paths `src`, `test`
-
-### 2026-03-18 · [Fix hosted checkout: include userId in Stripe session metadata (#124)](https://github.com/benhalverson/3dprinter-farm/pull/124)
-
-The `/cart/:cartId/checkout` route stored only `cartId` in Stripe session metadata, while the `checkout.session.completed` webhook handler requires both `cartId` and `userId` to fulfill orders — causing silent fulfillment failures after successful payments.
-
-Impact: **`src/routes/shoppingCart.ts`**
-- Added `authMiddleware` to the checkout route (consistent with `/cart/:cartId/payment-intent`)
-- Extracted `userId` from the JWT session payload using a typed interface; returns `401` if absent
-- `customerEmail` falls back to the session email if not provided in the request body
-- Metadata now includes both required fields:
-
-Context: paths `src`, `test`
-
-### 2026-03-18 · [Require authentication for presigned upload endpoints and bind ownerId server-side (#119)](https://github.com/benhalverson/3dprinter-farm/pull/119)
-
-`POST /v2/presigned-upload` and `POST /v2/confirm` were publicly accessible, and `ownerId` was caller-controlled with an `anonymous` fallback — enabling unauthenticated platform usage and ownership spoofing.
-
-Impact: // After
-  const { fileName } = requestBody as Record<string, unknown>;
-  const ownerId = c.get('userId') as string | undefined;
-  if (!ownerId) return c.json({ success: false, error: 'Unauthorized' }, 401);
-  // ...
-  ownerId: ownerId
-  ```
-
-Context: paths `src`, `test`
-
 ## Notes
 
-- 2026-06-11: Project-notes tests and workflow scripts are environment-sensitive (Node/runtime flags and test runner context), so keeping CI workflow settings aligned during merges is important to avoid regressions.
+- 2026-06-12: - **Compatibility** - The route intentionally preserves the old outward response contract while adapting to a different upstream API shape - **Fallback behavior** - Filament defaults to PLA Black until cart-level `filamentId` is reliably available everywhere
+- 2026-06-12: Legacy cart rows may not have `filament_id`; the cart layer treats those as PLA Black and backfills that default during add/merge flows to keep behavior stable across pre- and post-migration data.
+- 2026-06-12: - The V2 file workflow was duplicated across route handlers; extracting shared helpers removes the internal routing dependency without changing the external helper-route contracts - `estimate` cost fallback handling remains in place because the current Slant response shape is not fully uniform across callers - Spying on `File.size` does not survive Cloudflare Workers multipart serialisation in the vitest pool — the oversized-file test requires an actual `Uint8Array` allocation to cross the 100 MB threshold reliably - `parseResponseDetails` must attempt `json()` before `text()` because different Slant3D error responses (and test mocks) surface the body through different methods; falling back through both with a `JSON.parse` attempt handles all cases
+- 2026-06-12: The live Slant V2 estimate contract should be treated as `data.total`, not a mix of legacy top-level or alternate cost fields. The local `/v2/estimate` route intentionally continues to expose `estimatedCost` alongside `total` to avoid breaking downstream callers during the transition.
+- 2026-06-12: - The deleted webhook route had diverged into a TODO-only implementation with different response semantics; keeping a single mounted handler avoids silent drift between duplicate webhook paths.
+- 2026-06-11: - This repository uses pnpm, so npm lockfiles should not be committed or updated here.
 
-<!-- project-notes-sync: {"sourceRepository":"benhalverson/3dprinter-farm","sourceBranch":"main","generatorVersion":"1.0.0","generatedAt":"2026-06-11T08:07:24.259Z"} -->
+<!-- project-notes-sync: {"sourceRepository":"benhalverson/3dprinter-farm","sourceBranch":"main","generatorVersion":"1.0.0","generatedAt":"2026-06-12T05:47:21.386Z"} -->
