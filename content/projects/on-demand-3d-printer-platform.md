@@ -4,7 +4,7 @@ slug: on-demand-3d-printer-platform
 description: API and web application for intake, quoting, queue management, and fulfillment across custom print requests.
 status: active
 startedAt: 2026-01-12
-updatedAt: 2026-06-12
+updatedAt: 2026-07-06
 tags:
   - TypeScript
   - API
@@ -32,6 +32,76 @@ Build a dependable order-to-queue path that keeps pricing, material selection, a
 - [ ] Add webhook-driven notifications for state changes
 
 ## Recent progress
+
+### 2026-07-06 · [Process paid Stripe carts through Slant3D V2 orders (#155)](https://github.com/benhalverson/3dprinter-farm/pull/155)
+
+Stripe success webhooks now draft and process Slant3D V2 orders from the paid cart instead of using the legacy estimate flow. The webhook path is shared across Checkout Session and Payment Intent success events, with Stripe-backed idempotency and stricter fulfillment preconditions.
+
+- **Shared fulfillment path**
+  - Routes both `checkout.session.completed` and `payment_intent.succeeded` through the same Stripe → Slant V2 fulfillment flow.
+  - Uses Stripe payment/session identifiers as the idempotency key to suppress duplicate Slant orders on webhook retries.
+
+- **Fulfillment inputs**
+  - Loads cart items, decrypted shipping profile, product `publicFileServiceId`, and cart-level `filamentId`.
+  - Falls back to the default Slant filament when no cart filament is selected.
+  - Rejects fulfillment when `publicFileServiceId` is missing or `filamentId` is invalid.
+
+- **Slant V2 order lifecycle**
+  - Drafts orders with `POST /v2/api/orders`.
+  - Processes returned drafts with `POST /v2/api/orders/{publicOrderId}`.
+  - Keeps payment in Stripe; no `publicPaymentServiceId` is sent to Slant.
+
+```ts
+await fetch(`${BASE_URL_V2}orders`, { method: 'POST', body: JSON.stringify(draftPayload) });
+await fetch(`${BASE_URL_V2}orders/${publicOrderId}`, {
+  method: 'POST',
+  body: JSON.stringify({ orderNumber, metadata: { idempotencyKey } }),
+});
+```
+
+Impact: - Paid Stripe carts now create real Slant3D V2 orders from webhook success events.
+- Webhook retries no longer create duplicate Slant orders.
+- Carts are only cleared after Slant draft + process both succeed; failed fulfillment leaves the cart intact for retry/debugging.
+- Cart writes now persist a default-backed `filamentId`, and a new fulfillment tracking table records processed Stripe webhook work.
+- The branch now merges cleanly with current `main`, including the newer cart filament default behavior and admin order changes from `main`.
+- Drizzle config now discovers the local SQLite path from env vars or the Miniflare D1 directory instead of hardcoding a machine-specific filename.
+
+Context: paths `drizzle`, `drizzle.config.ts`, `src`, `test`
+
+### 2026-06-19 · [feat: Add admin order operations API (#167)](https://github.com/benhalverson/3dprinter-farm/pull/167)
+
+Adds API-first admin tools for order support and recovery. Four admin-only endpoints enable operators to inspect orders, retry failed Slant submissions, and resend notifications — all before any admin UI exists.
+
+**Schema additions:**
+- `orderEventsTable` for order event history (type, detail, actor, timestamp)
+- Lifecycle fields on `ordersTable`: `status`, `slantStatus`, `slantPublicOrderId`, Stripe IDs, `customerEmail`, timestamps
+
+**Endpoints:**
+- `GET /admin/orders` — list/search with filters: status, slantStatus, email, orderNumber, slantPublicOrderId, stripe checkout/payment intent IDs, date range, free-text query
+- `GET /admin/orders/:id` — full order detail including event history
+- `POST /admin/orders/:id/retry` — retry failed Slant submission; blocks if already fulfilled/shipped/completed
+- `POST /admin/orders/:id/resend-notification` — resend order notification; records event
+
+All endpoints use `requireCatalogMutationRole` middleware (existing admin enforcement pattern) and `describeRoute` for OpenAPI/Scalar docs.
+
+Impact: Operators can now programmatically list, inspect, retry, and resend notifications for orders via the API. Non-admin users receive 403. All endpoints appear in `/open-api` and `/docs`.
+
+Context: paths `drizzle`, `src`, `test`
+
+### 2026-06-12 · [finally able to order using the v2 endpoints (#164)](https://github.com/benhalverson/3dprinter-farm/pull/164)
+
+- Moves the cart shipping estimate flow onto the Slant3D V2 order payload and response shapes.
+- Updates product creation to use explicit `markupPercentage` semantics while keeping `price` as a legacy alias.
+- Tightens cart item validation so `filamentId` must be supplied instead of being silently defaulted.
+- Adds repo scripts and docs for the preferred D1 migration workflow: generate with Drizzle, apply remotely with `wrangler d1 migrations apply ecommerce --remote`.
+
+Impact: - `GET /cart/shipping` now sends the V2 draft-order shape with `platformId`, `ownerId`, nested `customer.details`, and `items`, and it parses shipping cost from the newer `deliveryCost`-style response.
+- `POST /add-product` and `POST /v2/add-product` now compute the stored product price from the slicer estimate plus `markupPercentage`, with legacy `price` still accepted as the old field name.
+- `POST /cart/add` now rejects requests that omit `filamentId` instead of defaulting it automatically.
+- Product and cart tests were updated to cover the new request/response contracts.
+- Maintainers now have `db:generate`, `db:migrate:local`, `db:push:local`, and `db:migrate:remote` scripts for the local and remote D1 migration workflow.
+
+Context: paths `README.md`, `drizzle`, `drizzle.config.ts`, `package.json`, `src`, `test`
 
 ### 2026-06-12 · [Use Slant3D V2 draft orders for cart shipping estimates (#154)](https://github.com/benhalverson/3dprinter-farm/pull/154)
 
@@ -309,39 +379,13 @@ Impact: See the linked pull request for implementation details.
 
 Context: labels `dependencies`, `javascript` | paths `package.json`, `pnpm-lock.yaml`
 
-### 2026-06-11 · [new workflow for blog setup (#128)](https://github.com/benhalverson/3dprinter-farm/pull/128)
-
-Adds the project-notes automation workflow set for this repository (PR-note validation, markdown generation, and blog-sync flow), plus follow-up fixes from review feedback.
-Also reconciles merge conflicts with `main` so the Node CI workflow keeps running both the standard test suite and `test:project-notes` with a frozen lockfile install.
-
-Impact: No direct end-user product behavior changes.
-Maintainers get updated CI/workflow behavior for project-notes automation and a conflict-free branch aligned with current `main` test infrastructure.
-
-Context: paths `.github`, `README.md`, `package.json`, `project-notes.config.json`, `test`, `tools`
-
-### 2026-06-11 · [fixed tests (#129)](https://github.com/benhalverson/3dprinter-farm/pull/129)
-
-fixed tests
-
-Impact: See the linked pull request for implementation details.
-
-Context: paths `.github`, `package.json`, `pnpm-lock.yaml`, `test`, `worker-configuration.d.ts`
-
-### 2026-03-18 · [Revert "Bump wrangler from 4.35.0 to 4.75.0" (#127)](https://github.com/benhalverson/3dprinter-farm/pull/127)
-
-Reverts benhalverson/3dprinter-farm#126
-
-Impact: See the linked pull request for implementation details.
-
-Context: paths `pnpm-lock.yaml`
-
 ## Notes
 
+- 2026-07-06: - After merging the latest `main`, the migration history needed a follow-up correction: `0003_cart_filament_id` remains the cart filament migration, `main` contributes `0004_ancient_triathlon` and `0005_salty_thunderbolt_ross`, and this PR's `stripe_fulfillment` migration was renumbered to `0006_add_stripe_fulfillment`. - The cart route now uses the shared schema default filament constant instead of duplicating the fallback value locally. - Webhook tests now cover both Stripe success event types and the failure modes that gate cart clearing.
+- 2026-06-19: - Retry is intentionally blocked for `fulfilled`/`shipped`/`completed` slant statuses and only allowed for `failed`/`error`/`pending` order statuses. The actual Slant API call is not wired in the retry handler — this records the event and updates status to `retrying`, leaving the fulfillment integration to a follow-up. - The `orderEventsTable` is append-only and serves as the audit trail for all admin actions. - Later issues (customer order history, refund/cancel) may add fields to the detail response.
+- 2026-06-12: - This branch includes regenerated Drizzle artifacts (`drizzle/migrations/schema.ts`, `relations.ts`, snapshot metadata, and `0004_ancient_triathlon.sql`) alongside the route changes. - Review the generated migration carefully before merge: `0004_ancient_triathlon.sql` re-adds `cart.user_id` and `cart.filament_id`, which were already present in the remote database and required migration-state reconciliation. - `drizzle.config.ts` currently contains a machine-specific local Wrangler/Miniflare SQLite path and should be normalized before merge if we want the branch to stay portable for other developers and CI.
 - 2026-06-12: - **Compatibility** - The route intentionally preserves the old outward response contract while adapting to a different upstream API shape - **Fallback behavior** - Filament defaults to PLA Black until cart-level `filamentId` is reliably available everywhere
 - 2026-06-12: Legacy cart rows may not have `filament_id`; the cart layer treats those as PLA Black and backfills that default during add/merge flows to keep behavior stable across pre- and post-migration data.
 - 2026-06-12: - The V2 file workflow was duplicated across route handlers; extracting shared helpers removes the internal routing dependency without changing the external helper-route contracts - `estimate` cost fallback handling remains in place because the current Slant response shape is not fully uniform across callers - Spying on `File.size` does not survive Cloudflare Workers multipart serialisation in the vitest pool — the oversized-file test requires an actual `Uint8Array` allocation to cross the 100 MB threshold reliably - `parseResponseDetails` must attempt `json()` before `text()` because different Slant3D error responses (and test mocks) surface the body through different methods; falling back through both with a `JSON.parse` attempt handles all cases
-- 2026-06-12: The live Slant V2 estimate contract should be treated as `data.total`, not a mix of legacy top-level or alternate cost fields. The local `/v2/estimate` route intentionally continues to expose `estimatedCost` alongside `total` to avoid breaking downstream callers during the transition.
-- 2026-06-12: - The deleted webhook route had diverged into a TODO-only implementation with different response semantics; keeping a single mounted handler avoids silent drift between duplicate webhook paths.
-- 2026-06-11: - This repository uses pnpm, so npm lockfiles should not be committed or updated here.
 
-<!-- project-notes-sync: {"sourceRepository":"benhalverson/3dprinter-farm","sourceBranch":"main","generatorVersion":"1.0.0","generatedAt":"2026-06-12T05:47:21.386Z"} -->
+<!-- project-notes-sync: {"sourceRepository":"benhalverson/3dprinter-farm","sourceBranch":"main","generatorVersion":"1.0.0","generatedAt":"2026-07-07T06:18:18.739Z"} -->
